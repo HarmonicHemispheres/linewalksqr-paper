@@ -1,3 +1,4 @@
+![](./banner.png)
 
 # LineWalkSQR: A Simple Algorithm for Detecting Perfect Squares in Greyscale Images  
 **Authors:** Robby Boney, OpenAI o1 <br>
