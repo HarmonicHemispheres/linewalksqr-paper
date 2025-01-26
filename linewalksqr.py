@@ -1,12 +1,21 @@
-# ----------------------- IMPORTS
+# ::IMPORTS -------------------------------------------------------------------------- #
+# cross platform path handling - https://docs.python.org/3/library/pathlib.html
+from pathlib import Path
+
+# image processing - https://opencv.org/
 import cv2
-import numpy as np
+
+# command line interface - https://typer.tiangolo.com/
+import typer
+
+# file system utilities - https://docs.python.org/3/library/os.html
 import os
-import json
 
-# ----------------------- GLOBALS
+# numpy array manipulation - https://numpy.org/doc/stable/index.html
+import numpy as np
 
-# ----------------------- UTIL METHODS
+
+# ::UTIL METHODS -------------------------------------------------------------------------- #
 def detect_squares_manually(bin_img, min_side_len, max_side_len, side_tolerance=2):
     """
     Detect squares in a binarized (black and white) image by scanning
@@ -131,35 +140,43 @@ def filter_overlapping_squares(squares, overlap_threshold=10):
     
     return final_squares
 
+# ::CLI SETUP -------------------------------------------------------------------------- #
+app = typer.Typer(
+    add_completion=False,
+    no_args_is_help=True
+    )
 
-# ----------------------- PUBLIC METHODS
-def extract_square_coords(image, bounding_box_scale=8) -> list:
-    """
-    Return a list of 4 corner coordinates for each detected square.
-    """
+# ::CLI COMMANDS -------------------------------------------------------------------------- #
+@app.command()
+def extract(
+    path: Path,
+    min_side_len: int = 15,
+    max_side_len: int = 100,
+    threshold: int = 150,
+    side_tolerance: int = 2,
+):
+    # 1. Load image & convert to grayscale
+    original = cv2.imread(path)
+    if original is None:
+        print(f"Could not open {path}")
+        return
+    gray = cv2.cvtColor(original, cv2.COLOR_BGR2GRAY)
 
-    # -- variables
-    detections = []
+    # 2. Binarize so that black lines => 255, background => 0 (adjust if needed)
+    _, bin_img = cv2.threshold(gray, threshold, 255, cv2.THRESH_BINARY_INV)
 
-    # -- Setting up Variables
-    bounding_box_scale = 8
-    min_side_len = 50
-    max_side_len = 200
-    side_tolerance = 2
 
-    # -- Preprocessing steps
-
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    _, bin_img = cv2.threshold(gray, 128, 255, cv2.THRESH_BINARY_INV)
+    # 3. Detect squares (raw, may have duplicates)
     all_squares = detect_squares_manually(bin_img, min_side_len, max_side_len, side_tolerance)
     print("Raw squares detected:", len(all_squares))
 
-    # -- Remove overlapping / duplicate squares
+    # 4. Remove overlapping / duplicate squares
     # Increase or decrease overlap_threshold depending on how strict you want to be.
     cleaned_squares = filter_overlapping_squares(all_squares, overlap_threshold=10)
     print("Filtered squares:", len(cleaned_squares))
 
-    # -- Annotate the final squares
+    # 5. Annotate the final squares
+    annotated = original.copy()
     for sq in cleaned_squares:
         (tl, tr, bl, br) = sq
         # Remember each corner is (row, col). 
@@ -169,12 +186,31 @@ def extract_square_coords(image, bounding_box_scale=8) -> list:
 
         pt1 = (col_tl, row_tl)
         pt2 = (col_br, row_br)
-        detections.append({
-            "type": "square",
-            "bbox": [col_tl-bounding_box_scale, 
-                    row_tl-bounding_box_scale,
-                    col_br+bounding_box_scale,
-                    row_br+bounding_box_scale],
-        })
-    
-    return detections
+        cv2.rectangle(annotated, pt1, pt2, (255, 0, 0), 2)
+
+        cv2.putText(
+            annotated, 
+            "square",               # "circle" or "square"
+            (col_tl, row_tl - 5),             # text position slightly above top-left
+            cv2.FONT_HERSHEY_SIMPLEX, 
+            0.5, 
+            (255, 0, 0), 
+            1
+        )
+
+    # 6. Display the annotated result
+    cv2.imshow("Detected Squares", annotated)
+    cv2.imwrite("annotated.png", annotated)  # save the result
+
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
+
+
+# ::EXECUTE ------------------------------------------------------------------------ #
+def main():
+    app()
+
+
+if __name__ == "__main__":  # ensure importing the script will not execute
+    main()
